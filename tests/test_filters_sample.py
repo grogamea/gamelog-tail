@@ -36,6 +36,11 @@ class TestSampleFilter:
         with pytest.raises(ValueError, match="rate must be >= 1"):
             sample_filter(rate=-1)
 
+    def test_rate_zero_raises_value_error(self):
+        """Zero is also an invalid rate and should raise ValueError."""
+        with pytest.raises(ValueError, match="rate must be >= 1"):
+            sample_filter(rate=0)
+
     def test_independent_buckets(self):
         f = sample_filter(rate=2)
         ea = _e(source="A")
