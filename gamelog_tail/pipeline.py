@@ -1,41 +1,62 @@
-"""Composable pipeline: parse → filter → format."""
-
+"""High-level pipeline: parse → filter → aggregate → format → emit."""
 from __future__ import annotations
 
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, List, Optional
 
-from gamelog_tail.parsers.base import BaseParser, LogEntry
-from gamelog_tail.filters import FilterFn
-from gamelog_tail.formatters import Formatter, plain
+from gamelog_tail import filters as _filters
+from gamelog_tail.aggregator import AggregateStats, aggregate
+from gamelog_tail.formatters import get_formatter
+from gamelog_tail.formatters_summary import get_summary_formatter
+from gamelog_tail.parsers.base import LogEntry
+from gamelog_tail.tail import parse_stream
+
+
+def build_filters(
+    levels: Optional[List[str]] = None,
+    message_pattern: Optional[str] = None,
+    source_pattern: Optional[str] = None,
+) -> List[Callable[[LogEntry], bool]]:
+    """Construct a list of filter callables from CLI-style arguments."""
+    result: List[Callable[[LogEntry], bool]] = []
+    if levels:
+        result.append(_filters.by_level(*levels))
+    if message_pattern:
+        result.append(_filters.by_message_pattern(message_pattern))
+    if source_pattern:
+        result.append(_filters.by_source_pattern(source_pattern))
+    return result
 
 
 def run(
     lines: Iterable[str],
-    parser: BaseParser,
-    filters: Iterable[FilterFn] | None = None,
-    formatter: Formatter = plain,
-) -> Iterator[str]:
-    """Parse *lines*, apply every filter, then format surviving entries.
+    *,
+    parser_hint: Optional[str] = None,
+    levels: Optional[List[str]] = None,
+    message_pattern: Optional[str] = None,
+    source_pattern: Optional[str] = None,
+    formatter: str = "plain",
+    print_fn: Callable[[str], None] = print,
+    collect_stats: bool = False,
+) -> Optional[AggregateStats]:
+    """Run the full pipeline over *lines*.
 
-    Yields one formatted string per entry that passes all filters.
-    Lines that the parser cannot recognise are yielded as-is (raw).
+    Returns an :class:`AggregateStats` instance when *collect_stats* is
+    ``True``, otherwise ``None``.
     """
-    filter_list = list(filters or [])
+    active_filters = build_filters(
+        levels=levels,
+        message_pattern=message_pattern,
+        source_pattern=source_pattern,
+    )
+    fmt = get_formatter(formatter)
+    entries: List[LogEntry] = []
 
-    for line in lines:
-        line = line.rstrip("\n")
-        if not line:
-            continue
+    for entry in parse_stream(lines, parser_hint=parser_hint):
+        if all(f(entry) for f in active_filters):
+            print_fn(fmt(entry))
+            if collect_stats:
+                entries.append(entry)
 
-        entry: LogEntry | None = parser.parse(line)
-        if entry is None:
-            yield line
-            continue
-
-        if all(f(entry) for f in filter_list):
-            yield formatter(entry)
-
-
-def build_filters(*filter_fns: FilterFn) -> list[FilterFn]:
-    """Convenience helper to collect filter callables into a list."""
-    return list(filter_fns)
+    if collect_stats:
+        return aggregate(entries)
+    return None
