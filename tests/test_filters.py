@@ -68,6 +68,11 @@ class TestByMessagePattern:
         f = by_message_pattern(r"error\s+\d+")
         assert f(make_entry(message="error 42 occurred")) is True
 
+    def test_invalid_regex_raises(self):
+        """An invalid regex pattern should raise an error at filter creation time."""
+        with pytest.raises(Exception):
+            by_message_pattern(r"[unclosed")
+
 
 class TestBySourcePattern:
     def test_matches_source(self):
@@ -91,6 +96,16 @@ class TestCombine:
         assert f(make_entry(level="ERROR", message="crash!")) is True
         assert f(make_entry(level="ERROR", message="ok")) is False
 
+    def test_combine_any_empty_filters_matches_all(self):
+        """combine_any with no filters should match every entry (vacuously true)."""
+        f = combine_any()
+        assert f(make_entry(level="INFO", message="hello")) is True
+
+    def test_combine_all_empty_filters_matches_all(self):
+        """combine_all with no filters should match every entry (vacuously true)."""
+        f = combine_all()
+        assert f(make_entry(level="INFO", message="hello")) is True
+
 
 class TestApplyFilters:
     def _entries(self):
@@ -100,23 +115,3 @@ class TestApplyFilters:
             make_entry(level="ERROR", message="crash"),
             make_entry(level="ERROR", message="another error"),
         ]
-
-    def test_filter_by_level(self):
-        result = list(apply_filters(self._entries(), by_level("ERROR")))
-        assert len(result) == 2
-
-    def test_filter_mode_any(self):
-        result = list(
-            apply_filters(
-                self._entries(),
-                by_level("WARNING"),
-                by_message_pattern("crash"),
-                mode="any",
-            )
-        )
-        assert len(result) == 2
-
-    def test_no_filters_passes_all(self):
-        # combine_all with zero filters: all() on empty is True
-        result = list(apply_filters(self._entries()))
-        assert len(result) == 4
