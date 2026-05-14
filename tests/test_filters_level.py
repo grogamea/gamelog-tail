@@ -81,13 +81,18 @@ class TestLevelRangeFilterBehaviour:
         assert len(result) == 1
         assert result[0].level == "WARNING"
 
-    def test_unknown_entry_level_passes_through(self):
-        f = level_range_filter(min_level="error", max_level="critical")
-        entries = [_e(None), _e("verbose"), _e("error")]
+    def test_none_level_entry_excluded(self):
+        """Entries with no level (level=None) should be excluded by the filter."""
+        f = level_range_filter(min_level="debug", max_level="critical")
+        entries = [_e(None), _e("info"), _e(None)]
         result = list(f(iter(entries)))
-        # None and unknown pass through; only error qualifies by rank
-        assert len(result) == 3
+        levels = [e.level for e in result]
+        assert None not in levels
+        assert "info" in levels
+        assert len(result) == 1
 
-    def test_empty_stream_returns_empty(self):
-        f = level_range_filter()
-        assert list(f(iter([]))) == []
+    def test_empty_input_returns_empty(self):
+        """Filtering an empty stream should yield an empty result."""
+        f = level_range_filter(min_level="info", max_level="error")
+        result = list(f(iter([])))
+        assert result == []
