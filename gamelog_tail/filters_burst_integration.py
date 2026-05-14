@@ -22,9 +22,18 @@ def build_burst_filters(
         max_count: Max occurrences before suppression (default 3 when enabled).
         window_seconds: Rolling window length in seconds (default 5.0).
         key_fields: Tuple of LogEntry field names to use as the burst key.
+
+    Raises:
+        ValueError: If *max_count* is not a positive integer, or *window_seconds*
+            is not a positive number.
     """
     if max_count is None and window_seconds is None:
         return []
+
+    if max_count is not None and max_count < 1:
+        raise ValueError(f"max_count must be a positive integer, got {max_count}")
+    if window_seconds is not None and window_seconds <= 0:
+        raise ValueError(f"window_seconds must be a positive number, got {window_seconds}")
 
     kwargs: dict = {}
     if max_count is not None:
